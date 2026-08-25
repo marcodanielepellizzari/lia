@@ -2,10 +2,11 @@ from django.conf import settings
 from django.conf.urls.static import static
 from django.contrib import admin
 from django.urls import path, include
-from django.views.generic import RedirectView
+
+from . import views
 
 urlpatterns = [
-    path("", RedirectView.as_view(pattern_name="dataset-list", permanent=False)),
+    path("", views.home, name="home"),
     path("admin/", admin.site.urls),
 
     # Auth: login/logout using the templates in templates/registration/
