@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}I miei artefatti{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h1 class="h3 mb-0">I miei set di artefatti</h1>
+    <a href="{% url 'artifactset-create' %}" class="btn btn-primary btn-sm">+ Nuovo set</a>
+</div>
+<p class="text-muted">Un set di artefatti raggruppa una o più misure isotopiche caricate da te, da confrontare con i dataset di giacimenti nei grafici.</p>
+
+<table class="table table-hover align-middle">
+    <thead><tr><th>Nome</th><th>Artefatti</th><th>Simbolo</th><th>Creato il</th></tr></thead>
+    <tbody>
+        {% for set in artifact_sets %}
+        <tr>
+            <td><a href="{% url 'artifactset-detail' set.pk %}">{{ set.name }}</a></td>
+            <td>{{ set.artifacts.count }}</td>
+            <td>
+                <span class="d-inline-block rounded-circle" style="width:14px;height:14px;background:{{ set.default_color }};border:1px solid #999;"></span>
+                {{ set.get_default_symbol_display }}
+            </td>
+            <td>{{ set.created_at|date:"d/m/Y" }}</td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="4" class="text-muted">Nessun set ancora creato.</td></tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endblock %}

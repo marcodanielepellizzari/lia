@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block title %}Condividi — {{ dataset.name }}{% endblock %}
+{% block content %}
+<h1 class="h4 mb-3">Condividi "{{ dataset.name }}"</h1>
+
+<div class="row">
+    <div class="col-md-5">
+        <form method="post">
+            {% csrf_token %}
+            <div class="mb-3">
+                <label class="form-label">{{ form.shared_with.label }}</label>
+                {{ form.shared_with }}
+            </div>
+            <div class="form-check mb-3">
+                {{ form.can_edit }}
+                <label class="form-check-label">{{ form.can_edit.label }}</label>
+            </div>
+            <button type="submit" class="btn btn-primary btn-sm">Condividi</button>
+        </form>
+    </div>
+    <div class="col-md-7">
+        <h2 class="h6">Utenti con cui è già condiviso</h2>
+        <table class="table table-sm">
+            <tbody>
+                {% for share in shares %}
+                <tr>
+                    <td>{{ share.shared_with }}</td>
+                    <td>{% if share.can_edit %}<span class="badge bg-light text-dark">può modificare</span>{% endif %}</td>
+                    <td class="text-end">
+                        <form method="post" class="d-inline">
+                            {% csrf_token %}
+                            <input type="hidden" name="remove_share_id" value="{{ share.id }}">
+                            <button type="submit" class="btn btn-outline-danger btn-sm">Rimuovi</button>
+                        </form>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr><td class="text-muted">Nessuna condivisione ancora.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<a href="{% url 'dataset-detail' dataset.pk %}" class="btn btn-link">← Torna al dataset</a>
+{% endblock %}

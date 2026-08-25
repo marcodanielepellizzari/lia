@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block title %}Nuovo dataset{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-6">
+        <h1 class="h3 mb-4">Nuovo dataset</h1>
+        <p class="text-muted">Step 1 di 4 — dopo aver creato il dataset potrai caricare il file con i campioni.</p>
+        <form method="post">
+            {% csrf_token %}
+            <div class="mb-3">
+                <label class="form-label">{{ form.name.label }}</label>
+                {{ form.name }}
+            </div>
+            <div class="mb-3">
+                <label class="form-label">{{ form.visibility.label }}</label>
+                {{ form.visibility }}
+                <div class="form-text">Potrai condividere il dataset con utenti specifici in un secondo momento.</div>
+            </div>
+            <div class="row">
+                <div class="col-6 mb-3">
+                    <label class="form-label">{{ form.default_symbol.label }}</label>
+                    {{ form.default_symbol }}
+                </div>
+                <div class="col-6 mb-3">
+                    <label class="form-label">{{ form.default_color.label }}</label>
+                    {{ form.default_color }}
+                </div>
+            </div>
+            <div class="form-text mb-3">Simbolo e colore verranno usati come default per tutti i campioni di questo dataset nelle future pagine di analisi.</div>
+            <button type="submit" class="btn btn-primary">Crea e prosegui al caricamento</button>
+        </form>
+    </div>
+</div>
+{% endblock %}

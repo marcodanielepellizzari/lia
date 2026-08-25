@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% load dict_extras %}
+{% block title %}Anteprima — {{ dataset.name }}{% endblock %}
+{% block content %}
+<h1 class="h4 mb-1">Anteprima caricamento</h1>
+<p class="text-muted">Step 4 di 4 — verifica i numeri prima di confermare l'importazione definitiva.</p>
+
+<div class="row mb-4">
+    <div class="col-md-3"><div class="card card-body text-center"><span class="display-6">{{ preview.total_rows }}</span><span class="text-muted small">righe totali nel file</span></div></div>
+    <div class="col-md-3"><div class="card card-body text-center"><span class="display-6 text-success">{{ preview.rows_with_label }}</span><span class="text-muted small">righe valide (con label)</span></div></div>
+    <div class="col-md-3"><div class="card card-body text-center"><span class="display-6 text-warning">{{ preview.rows_skipped }}</span><span class="text-muted small">righe scartate (senza label)</span></div></div>
+    <div class="col-md-3"><div class="card card-body text-center"><span class="display-6">{{ preview.element_columns_detected }}</span><span class="text-muted small">colonne elemento rilevate</span></div></div>
+</div>
+
+<h2 class="h6">Prime righe mappate</h2>
+<div class="table-responsive mb-4">
+<table class="table table-sm table-bordered">
+    <thead>
+        <tr>
+            {% for key, label, required in field_definitions %}<th>{{ label }}</th>{% endfor %}
+        </tr>
+    </thead>
+    <tbody>
+        {% for row in preview.sample_rows %}
+        <tr>
+            {% for key, label, required in field_definitions %}<td>{{ row|get_item:key|default:"" }}</td>{% endfor %}
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+</div>
+
+<form method="post">
+    {% csrf_token %}
+    <button type="submit" class="btn btn-primary">Conferma e importa {{ preview.rows_with_label }} campioni</button>
+    <a href="{% url 'dataset-upload-map' dataset.pk %}" class="btn btn-link">← Torna al mapping</a>
+</form>
+{% endblock %}

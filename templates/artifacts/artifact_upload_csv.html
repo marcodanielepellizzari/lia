@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block title %}Carica CSV — {{ artifact_set.name }}{% endblock %}
+{% block content %}
+<h1 class="h4 mb-3">Carica artefatti da CSV in "{{ artifact_set.name }}"</h1>
+<form method="post" enctype="multipart/form-data" class="col-md-6">
+    {% csrf_token %}
+    <div class="mb-3">
+        {{ form.file }}
+        <div class="form-text">{{ form.file.help_text }}</div>
+    </div>
+    <button type="submit" class="btn btn-primary">Carica</button>
+    <a href="{% url 'artifactset-detail' artifact_set.pk %}" class="btn btn-link">Annulla</a>
+</form>
+{% endblock %}

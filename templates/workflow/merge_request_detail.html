@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% block title %}Merge request #{{ merge_request.pk }}{% endblock %}
+{% block content %}
+<h1 class="h4 mb-1">Merge request #{{ merge_request.pk }} — {{ merge_request.dataset.name }}</h1>
+<p class="text-muted">Inviata da {{ merge_request.submitted_by }} il {{ merge_request.created_at|date:"d/m/Y H:i" }} · {{ sample_count }} campioni</p>
+
+<div class="row mb-4">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-body">
+                <h2 class="h6 card-title">Nuovi valori anagrafici rilevati</h2>
+                {% if merge_request.new_anagraphical_values %}
+                    {% for kind, values in merge_request.new_anagraphical_values.items %}
+                        {% if values %}
+                            <p class="mb-1"><strong>{{ kind }}</strong>: {{ values|join:", " }}</p>
+                        {% endif %}
+                    {% endfor %}
+                {% else %}
+                    <p class="text-muted small mb-0">Nessun valore anagrafico nuovo — usa dati anagrafici già esistenti.</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-body">
+                <h2 class="h6 card-title">Dataset</h2>
+                <p class="mb-1">Visibilità richiesta: {{ merge_request.dataset.get_visibility_display }}</p>
+                <p class="mb-1">
+                    Simbolo/colore di default:
+                    <span class="d-inline-block rounded-circle" style="width:12px;height:12px;background:{{ merge_request.dataset.default_color }};border:1px solid #999;"></span>
+                    {{ merge_request.dataset.get_default_symbol_display }}
+                </p>
+                <a href="{% url 'dataset-detail' merge_request.dataset.pk %}" class="btn btn-outline-secondary btn-sm">Vedi tutti i campioni</a>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% if merge_request.status == "open" %}
+<form method="post">
+    {% csrf_token %}
+    <div class="mb-3">
+        <label class="form-label">{{ form.review_notes.label }}</label>
+        {{ form.review_notes }}
+    </div>
+    <button type="submit" name="action" value="approve" class="btn btn-success">Approva e pubblica</button>
+    <button type="submit" name="action" value="reject" class="btn btn-outline-danger">Rifiuta</button>
+</form>
+{% else %}
+<div class="alert alert-secondary">
+    Questa merge request è già stata {{ merge_request.get_status_display|lower }}
+    {% if merge_request.reviewer %}da {{ merge_request.reviewer }}{% endif %}
+    {% if merge_request.review_notes %}<br><em>{{ merge_request.review_notes }}</em>{% endif %}
+</div>
+{% endif %}
+{% endblock %}

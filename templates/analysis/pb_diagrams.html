@@ -1,0 +1,226 @@
+{% extends "base.html" %}
+{% block title %}Diagrammi isotopici Pb{% endblock %}
+{% block content %}
+<h1 class="h3 mb-3">Diagrammi isotopici del Pb</h1>
+
+<div class="row">
+    <div class="col-md-3">
+        <form method="get">
+            <div class="card mb-3">
+                <div class="card-body">
+                    <h2 class="h6 card-title">Data source</h2>
+                    {% for dataset in visible_datasets %}
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" name="datasets" value="{{ dataset.pk }}" id="ds{{ dataset.pk }}"
+                               {% if dataset.pk|stringformat:"s" in selected_dataset_ids %}checked{% endif %}>
+                        <label class="form-check-label" for="ds{{ dataset.pk }}">
+                            <span class="d-inline-block rounded-circle" style="width:10px;height:10px;background:{{ dataset.default_color }};"></span>
+                            {{ dataset.name }}
+                        </label>
+                    </div>
+                    {% empty %}
+                    <p class="text-muted small">Nessun dataset disponibile.</p>
+                    {% endfor %}
+
+                    {% if own_artifact_sets %}
+                    <hr>
+                    <h2 class="h6 card-title">I miei artefatti</h2>
+                    {% for aset in own_artifact_sets %}
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" name="artifact_sets" value="{{ aset.pk }}" id="as{{ aset.pk }}"
+                               {% if aset.pk|stringformat:"s" in selected_artifact_set_ids %}checked{% endif %}>
+                        <label class="form-check-label" for="as{{ aset.pk }}">
+                            <span class="d-inline-block rounded-circle" style="width:10px;height:10px;background:{{ aset.default_color }};"></span>
+                            {{ aset.name }}
+                        </label>
+                    </div>
+                    {% endfor %}
+                    {% elif user.is_authenticated %}
+                    <hr>
+                    <p class="text-muted small mb-0">Non hai ancora caricato artefatti. <a href="{% url 'artifactset-create' %}">Creane uno</a>.</p>
+                    {% endif %}
+                </div>
+            </div>
+
+            <div class="card mb-3">
+                <div class="card-body">
+                    <h2 class="h6 card-title">Visualizzazione depositi</h2>
+                    <div class="form-check">
+                        <input class="form-check-input" type="radio" name="display_mode" value="points" id="dmPoints" {% if display_mode == "points" %}checked{% endif %}>
+                        <label class="form-check-label" for="dmPoints">Punti</label>
+                    </div>
+                    <div class="form-check mb-2">
+                        <input class="form-check-input" type="radio" name="display_mode" value="density" id="dmDensity" {% if display_mode == "density" %}checked{% endif %}>
+                        <label class="form-check-label" for="dmDensity">Densità (kernel density)</label>
+                    </div>
+                    <div class="form-text">La densità si applica solo ai dataset di giacimenti (servono almeno 5 campioni con dati validi); gli artefatti restano sempre come punti, per confrontarli con il campo di densità.</div>
+                </div>
+            </div>
+
+            <div class="card mb-3">
+                <div class="card-body">
+                    <h2 class="h6 card-title">Filtri</h2>
+
+                    <label class="form-label small">Paese</label>
+                    <select name="countries" class="form-select form-select-sm mb-2" multiple size="5">
+                        {% for country in countries %}
+                        <option value="{{ country.pk }}" {% if country.pk|stringformat:"s" in selected_country_ids %}selected{% endif %}>{{ country.name }}</option>
+                        {% endfor %}
+                    </select>
+                    <div class="form-text mb-2">Ctrl/Cmd+click per selezionarne più di uno. Si applica anche agli artefatti (in base al paese di ritrovamento).</div>
+
+                    <label class="form-label small">Tipo di deposito contiene</label>
+                    <input type="text" name="deposit_type" value="{{ deposit_type_contains }}" class="form-control form-control-sm mb-2" placeholder="es. VMS, skarn...">
+
+                    <label class="form-label small">Livello di accesso</label>
+                    <select name="access_level" class="form-select form-select-sm mb-2">
+                        <option value="" {% if not access_level %}selected{% endif %}>Tutti</option>
+                        <option value="free" {% if access_level == "free" %}selected{% endif %}>Free</option>
+                        <option value="limited" {% if access_level == "limited" %}selected{% endif %}>Limited</option>
+                    </select>
+                </div>
+            </div>
+            <button type="submit" class="btn btn-primary btn-sm w-100">Applica filtri</button>
+        </form>
+    </div>
+
+    <div class="col-md-9">
+        <p class="text-muted">{{ total_points }} campioni/artefatti plottati.</p>
+        <div id="chart1" style="height:420px;"></div>
+        <div id="chart2" style="height:420px;" class="mt-4"></div>
+        <div id="chart3" style="height:420px;" class="mt-4"></div>
+
+        <hr class="my-4">
+        <h2 class="h5">Spazio isotopico 3D</h2>
+        <p class="text-muted small">Assi: 206Pb/204Pb, 207Pb/204Pb, 208Pb/204Pb — trascina per ruotare, scroll per zoomare.</p>
+        <div id="chart3d" style="height:560px;"></div>
+    </div>
+</div>
+
+<script src="https://cdn.plot.ly/plotly-2.32.0.min.js"></script>
+<script>
+    const groups = {{ groups_json|safe }};
+    const density = {{ density_json|safe }};
+    const displayMode = "{{ display_mode }}";
+
+    // --- 2D diagrams (points and/or KDE contours) ---------------------
+
+    function buildScatterTrace(group, xKey, yKey) {
+        const xs = [], ys = [], texts = [];
+        group.points.forEach(function (p) {
+            if (p[xKey] !== null && p[yKey] !== null) {
+                xs.push(p[xKey]);
+                ys.push(p[yKey]);
+                texts.push(p.label + (p.location ? " — " + p.location : ""));
+            }
+        });
+        if (!xs.length) return null;
+        return {
+            x: xs, y: ys, text: texts,
+            mode: "markers",
+            type: "scatter",
+            name: group.name,
+            marker: { color: group.color, symbol: group.symbol, size: 9, line: { width: 1, color: "#333" } },
+        };
+    }
+
+    function soloColorscale(hexColor) {
+        // A single-color colorscale, so each dataset's KDE contour reads
+        // as "its own" density field instead of a shared rainbow scale.
+        return [[0, "rgba(255,255,255,0)"], [1, hexColor]];
+    }
+
+    function buildContourTrace(entry, name) {
+        return {
+            x: entry.grid.x, y: entry.grid.y, z: entry.grid.z,
+            type: "contour",
+            name: name,
+            showscale: false,
+            colorscale: soloColorscale(entry.color),
+            contours: { coloring: "fill" },
+            opacity: 0.55,
+            line: { width: 1 },
+        };
+    }
+
+    function buildTraces(diagramKey, xKey, yKey) {
+        const traces = [];
+        const densityEntries = density[diagramKey] || [];
+        const densityByName = {};
+        densityEntries.forEach(function (e) { densityByName[e.name] = e; });
+
+        groups.forEach(function (group) {
+            if (group.kind === "dataset" && displayMode === "density" && densityByName[group.name]) {
+                traces.push(buildContourTrace(densityByName[group.name], group.name));
+            } else {
+                const scatter = buildScatterTrace(group, xKey, yKey);
+                if (scatter) traces.push(scatter);
+            }
+        });
+        return traces;
+    }
+
+    const layoutBase = { margin: { t: 30, r: 20, b: 50, l: 60 }, hovermode: "closest" };
+
+    Plotly.newPlot(
+        "chart1",
+        buildTraces("diagram1", "pb206_204", "pb207_204"),
+        Object.assign({ title: "206Pb/204Pb vs 207Pb/204Pb", xaxis: { title: "206Pb/204Pb" }, yaxis: { title: "207Pb/204Pb" } }, layoutBase)
+    );
+
+    Plotly.newPlot(
+        "chart2",
+        buildTraces("diagram2", "pb206_204", "pb208_204"),
+        Object.assign({ title: "206Pb/204Pb vs 208Pb/204Pb", xaxis: { title: "206Pb/204Pb" }, yaxis: { title: "208Pb/204Pb" } }, layoutBase)
+    );
+
+    Plotly.newPlot(
+        "chart3",
+        buildTraces("diagram3", "pb207_206", "pb208_206"),
+        Object.assign({ title: "207Pb/206Pb vs 208Pb/206Pb", xaxis: { title: "207Pb/206Pb" }, yaxis: { title: "208Pb/206Pb" } }, layoutBase)
+    );
+
+    // --- 3D scatter: 206/204, 207/204, 208/204 on x/y/z ----------------
+    // Plotly's scatter3d only supports a small fixed set of marker
+    // symbols, unlike the 2D scatter: map our dataset/artifact symbols
+    // onto the closest 3D-compatible one.
+    const symbol3dMap = {
+        "circle": "circle", "square": "square", "diamond": "diamond",
+        "star": "cross", "cross": "x",
+        "triangle-up": "diamond-open", "triangle-down": "square-open",
+    };
+
+    const traces3d = groups.map(function (group) {
+        const xs = [], ys = [], zs = [], texts = [];
+        group.points.forEach(function (p) {
+            if (p.pb206_204 !== null && p.pb207_204 !== null && p.pb208_204 !== null) {
+                xs.push(p.pb206_204);
+                ys.push(p.pb207_204);
+                zs.push(p.pb208_204);
+                texts.push(p.label + (p.location ? " — " + p.location : ""));
+            }
+        });
+        return {
+            x: xs, y: ys, z: zs, text: texts,
+            mode: "markers",
+            type: "scatter3d",
+            name: group.name,
+            marker: {
+                color: group.color,
+                symbol: symbol3dMap[group.symbol] || "circle",
+                size: 4,
+                line: { width: 0.5, color: "#333" },
+            },
+        };
+    }).filter(function (trace) { return trace.x.length > 0; });
+
+    Plotly.newPlot("chart3d", traces3d, {
+        margin: { t: 10, r: 0, b: 0, l: 0 },
+        scene: {
+            xaxis: { title: "206Pb/204Pb" },
+            yaxis: { title: "207Pb/204Pb" },
+            zaxis: { title: "208Pb/204Pb" },
+        },
+    });
+</script>
+{% endblock %}

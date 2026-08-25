@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+{% block title %}{{ dataset.name }}{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-start mb-3">
+    <div>
+        <h1 class="h3 mb-1">
+            <span class="d-inline-block rounded-circle" style="width:16px;height:16px;background:{{ dataset.default_color }};border:1px solid #999;"></span>
+            {{ dataset.name }}
+        </h1>
+        <p class="text-muted mb-0">
+            Proprietario: {{ dataset.owner }} ·
+            Visibilità: {{ dataset.get_visibility_display }} ·
+            Simbolo grafico: {{ dataset.get_default_symbol_display }}
+        </p>
+    </div>
+    <div>
+        {% if dataset.status == "draft" %}<span class="badge bg-warning text-dark fs-6">Bozza</span>
+        {% elif dataset.status == "pending_review" %}<span class="badge bg-info text-dark fs-6">In review</span>
+        {% elif dataset.status == "merged" %}<span class="badge bg-success fs-6">Pubblicato</span>
+        {% else %}<span class="badge bg-danger fs-6">Rifiutato</span>{% endif %}
+    </div>
+</div>
+
+<div class="row mb-4">
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-body">
+                <h2 class="h6 card-title">Campioni</h2>
+                <p class="display-6">{{ sample_count }}</p>
+
+                {% if is_owner and dataset.status == "draft" %}
+                    <a href="{% url 'dataset-upload' dataset.pk %}" class="btn btn-outline-primary btn-sm">Carica altri dati</a>
+                    {% if sample_count > 0 %}
+                        <form method="post" action="{% url 'dataset-submit-review' dataset.pk %}" class="d-inline">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-primary btn-sm">Invia per la review →</button>
+                        </form>
+                    {% endif %}
+                {% endif %}
+
+                {% if open_merge_request %}
+                    <p class="mt-3 mb-0"><a href="{% url 'merge-request-detail' open_merge_request.pk %}">Vedi merge request #{{ open_merge_request.pk }} (in corso)</a></p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-body">
+                <h2 class="h6 card-title">Condivisione</h2>
+                {% if shares %}
+                    <ul class="list-unstyled mb-2">
+                        {% for share in shares %}
+                            <li>{{ share.shared_with }} {% if share.can_edit %}<span class="badge bg-light text-dark">può modificare</span>{% endif %}</li>
+                        {% endfor %}
+                    </ul>
+                {% else %}
+                    <p class="text-muted small">Nessuna condivisione attiva.</p>
+                {% endif %}
+                {% if is_owner %}
+                    <a href="{% url 'dataset-share' dataset.pk %}" class="btn btn-outline-secondary btn-sm">Gestisci condivisione</a>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<table class="table table-sm">
+    <thead><tr><th>Label</th><th>Località</th><th>206Pb/204Pb</th><th>207Pb/204Pb</th><th>208Pb/204Pb</th></tr></thead>
+    <tbody>
+        {% for sample in dataset.samples.all|slice:":25" %}
+        <tr>
+            <td>{{ sample.label }}</td>
+            <td>{{ sample.locality }}</td>
+            <td>{{ sample.lead_isotopes.pb206_204|default:"—" }}</td>
+            <td>{{ sample.lead_isotopes.pb207_204|default:"—" }}</td>
+            <td>{{ sample.lead_isotopes.pb208_204|default:"—" }}</td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="5" class="text-muted">Nessun campione ancora caricato.</td></tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% if sample_count > 25 %}<p class="text-muted small">Mostrati i primi 25 di {{ sample_count }} campioni.</p>{% endif %}
+{% endblock %}

@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block title %}Carica dati — {{ dataset.name }}{% endblock %}
+{% block content %}
+<h1 class="h4 mb-1">Carica dati in "{{ dataset.name }}"</h1>
+<p class="text-muted">Step 2 di 4 — carica il file CSV o Excel con i campioni.</p>
+
+<form method="post" enctype="multipart/form-data" class="col-md-6">
+    {% csrf_token %}
+    <div class="mb-3">
+        {{ form.file }}
+        {% if form.file.errors %}<div class="text-danger small">{{ form.file.errors }}</div>{% endif %}
+    </div>
+    <button type="submit" class="btn btn-primary">Carica e continua →</button>
+    <a href="{% url 'dataset-detail' dataset.pk %}" class="btn btn-link">Annulla</a>
+</form>
+{% endblock %}

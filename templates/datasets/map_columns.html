@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}Mappa le colonne — {{ dataset.name }}{% endblock %}
+{% block content %}
+<h1 class="h4 mb-1">Mappa le colonne del file</h1>
+<p class="text-muted">
+    Step 3 di 4 — abbiamo indovinato il mapping dove possibile. Correggi se necessario;
+    i campi con * sono obbligatori. Le colonne non mappate qui e riconosciute come
+    "mg/Kg &lt;elemento&gt;" o "Wt% &lt;elemento&gt;" verranno salvate automaticamente come
+    metadati (elementi in tracce).
+</p>
+
+<form method="post">
+    {% csrf_token %}
+    <div class="row">
+        {% for field in form %}
+        <div class="col-md-6 mb-3">
+            <label class="form-label">
+                {{ field.label }}{% if field.field.required %} *{% endif %}
+            </label>
+            {{ field }}
+            {% if field.errors %}<div class="text-danger small">{{ field.errors }}</div>{% endif %}
+        </div>
+        {% endfor %}
+    </div>
+    <button type="submit" class="btn btn-primary">Continua all'anteprima →</button>
+</form>
+
+<hr class="my-4">
+<p class="text-muted small">Colonne rilevate nel file ({{ detected_columns|length }}):</p>
+<p class="small text-muted">{{ detected_columns|join:", " }}</p>
+{% endblock %}

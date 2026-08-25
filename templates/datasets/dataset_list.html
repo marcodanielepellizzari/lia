@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block title %}Dataset{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h1 class="h3 mb-0">Dataset</h1>
+    {% if user.is_authenticated %}
+        <a href="{% url 'dataset-create' %}" class="btn btn-primary btn-sm">+ Nuovo dataset</a>
+    {% endif %}
+</div>
+
+{% if not user.is_authenticated %}
+    <p class="text-muted">Stai visualizzando solo il dataset pubblico. <a href="{% url 'login' %}">Accedi</a> per vedere e caricare dataset privati.</p>
+{% endif %}
+
+<table class="table table-hover align-middle">
+    <thead>
+        <tr>
+            <th>Nome</th>
+            <th>Proprietario</th>
+            <th>Visibilità</th>
+            <th>Stato</th>
+            <th>Simbolo</th>
+            <th>Creato il</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for dataset in datasets %}
+        <tr>
+            <td><a href="{% url 'dataset-detail' dataset.pk %}">{{ dataset.name }}</a></td>
+            <td>{{ dataset.owner }}</td>
+            <td><span class="badge bg-secondary">{{ dataset.get_visibility_display }}</span></td>
+            <td>
+                {% if dataset.status == "draft" %}<span class="badge bg-warning text-dark">Bozza</span>
+                {% elif dataset.status == "pending_review" %}<span class="badge bg-info text-dark">In review</span>
+                {% elif dataset.status == "merged" %}<span class="badge bg-success">Pubblicato</span>
+                {% else %}<span class="badge bg-danger">Rifiutato</span>{% endif %}
+            </td>
+            <td>
+                <span class="d-inline-block rounded-circle" style="width:14px;height:14px;background:{{ dataset.default_color }};border:1px solid #999;"></span>
+                {{ dataset.get_default_symbol_display }}
+            </td>
+            <td>{{ dataset.created_at|date:"d/m/Y" }}</td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="6" class="text-muted">Nessun dataset visibile.</td></tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endblock %}

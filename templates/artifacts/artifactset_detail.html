@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block title %}{{ artifact_set.name }}{% endblock %}
+{% block content %}
+<h1 class="h3 mb-1">{{ artifact_set.name }}</h1>
+<p class="text-muted">{{ artifact_set.artifacts.count }} artefatti</p>
+
+<a href="{% url 'artifact-add-manual' artifact_set.pk %}" class="btn btn-outline-primary btn-sm">+ Aggiungi manualmente</a>
+<a href="{% url 'artifact-upload-csv' artifact_set.pk %}" class="btn btn-outline-secondary btn-sm">Carica da CSV</a>
+<a href="{% url 'pb-diagrams' %}?artifact_sets={{ artifact_set.pk }}" class="btn btn-success btn-sm">Vedi nei grafici →</a>
+
+<table class="table table-sm mt-3">
+    <thead><tr><th>Label</th><th>Paese</th><th>Sito</th><th>206/204</th><th>207/204</th><th>208/204</th><th></th></tr></thead>
+    <tbody>
+        {% for artifact in artifact_set.artifacts.all %}
+        <tr>
+            <td>{{ artifact.label }}</td>
+            <td>{{ artifact.country|default:"—" }}</td>
+            <td>{{ artifact.location_detail|default:"—" }}</td>
+            <td>{{ artifact.pb206_204|default:"—" }}</td>
+            <td>{{ artifact.pb207_204|default:"—" }}</td>
+            <td>{{ artifact.pb208_204|default:"—" }}</td>
+            <td>
+                <form method="post" action="{% url 'artifact-delete' artifact_set.pk artifact.pk %}" class="d-inline">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-sm btn-outline-danger">Rimuovi</button>
+                </form>
+            </td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="7" class="text-muted">Nessun artefatto ancora caricato.</td></tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endblock %}

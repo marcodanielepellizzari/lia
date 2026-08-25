@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}Coda di review{% endblock %}
+{% block content %}
+<h1 class="h3 mb-3">Coda di review</h1>
+
+<table class="table table-hover align-middle">
+    <thead>
+        <tr><th>Dataset</th><th>Inviato da</th><th>Stato</th><th>Data invio</th><th></th></tr>
+    </thead>
+    <tbody>
+        {% for mr in merge_requests %}
+        <tr>
+            <td>{{ mr.dataset.name }}</td>
+            <td>{{ mr.submitted_by }}</td>
+            <td>
+                {% if mr.status == "open" %}<span class="badge bg-info text-dark">Aperta</span>
+                {% elif mr.status == "approved" %}<span class="badge bg-success">Approvata</span>
+                {% else %}<span class="badge bg-danger">Rifiutata</span>{% endif %}
+            </td>
+            <td>{{ mr.created_at|date:"d/m/Y H:i" }}</td>
+            <td class="text-end"><a href="{% url 'merge-request-detail' mr.pk %}" class="btn btn-sm btn-outline-primary">Apri</a></td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="5" class="text-muted">Nessuna merge request.</td></tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endblock %}
