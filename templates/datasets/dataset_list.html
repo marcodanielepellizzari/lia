@@ -12,6 +12,16 @@
     <p class="text-muted">Stai visualizzando solo il dataset pubblico. <a href="{% url 'login' %}">Accedi</a> per vedere e caricare dataset privati.</p>
 {% endif %}
 
+{% if not datasets %}
+    <div class="alert alert-warning">
+        {% if user.is_authenticated %}
+            Nessun dataset disponibile per il tuo utente: non hai ancora dataset propri, condivisi con te, o pubblici.
+            <a href="{% url 'dataset-create' %}" class="alert-link">Carica il tuo primo dataset</a>.
+        {% else %}
+            Nessun dataset pubblico disponibile al momento. <a href="{% url 'login' %}" class="alert-link">Accedi</a> per vedere eventuali dataset privati o condivisi con te.
+        {% endif %}
+    </div>
+{% else %}
 <table class="table table-hover align-middle">
     <thead>
         <tr>
@@ -41,9 +51,8 @@
             </td>
             <td>{{ dataset.created_at|date:"d/m/Y" }}</td>
         </tr>
-        {% empty %}
-        <tr><td colspan="6" class="text-muted">Nessun dataset visibile.</td></tr>
         {% endfor %}
     </tbody>
 </table>
+{% endif %}
 {% endblock %}
