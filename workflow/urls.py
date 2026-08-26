@@ -3,6 +3,6 @@ from .views import SavedFilterViewSet, DatasetViewSet
 
 router = DefaultRouter()
 router.register("saved-filters", SavedFilterViewSet, basename="savedfilter")
-router.register("datasets", DatasetViewSet, basename="dataset")
+router.register("datasets", DatasetViewSet, basename="api-dataset")
 
 urlpatterns = router.urls

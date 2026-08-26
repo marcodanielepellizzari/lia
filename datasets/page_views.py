@@ -4,6 +4,7 @@ The DRF APIs in datasets/views.py remain available for future use
 (external clients, analysis pages) but are not the main path here: the
 server renders HTML directly, no frontend build step.
 """
+import csv
 import os
 import uuid
 
@@ -12,6 +13,7 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied
 from django.db.models import Q
+from django.http import HttpResponse
 from django.shortcuts import render, redirect, get_object_or_404
 from django.urls import reverse
 from django.views.generic import ListView, DetailView, CreateView
@@ -76,6 +78,8 @@ class DatasetDetailView(DetailView):
         ctx["sample_count"] = dataset.samples.count()
         ctx["shares"] = dataset.shares.select_related("shared_with")
         ctx["open_merge_request"] = dataset.merge_requests.filter(status=MergeRequest.Status.OPEN).first()
+        rejected = self.request.session.get(_rejected_rows_session_key(dataset.pk))
+        ctx["rejected_rows_count"] = len(rejected["rows"]) if rejected else 0
         return ctx
 
 
@@ -154,6 +158,10 @@ def dataset_submit_for_review(request, pk):
 
 def _session_key(dataset_pk):
     return f"upload_wizard_{dataset_pk}"
+
+
+def _rejected_rows_session_key(dataset_pk):
+    return f"upload_wizard_rejected_rows_{dataset_pk}"
 
 
 def _get_owned_draft_dataset(request, pk):
@@ -240,18 +248,53 @@ def upload_preview(request, pk):
     preview = services.preview_rows(df, state["column_mapping"], element_columns)
 
     if request.method == "POST":
-        created_count, new_anag = services.import_rows(
+        created_count, new_anag, rejected_rows = services.import_rows(
             df, dataset, request.user, state["column_mapping"], element_columns
         )
         del request.session[_session_key(pk)]
+        if rejected_rows:
+            request.session[_rejected_rows_session_key(pk)] = {
+                "columns": list(df.columns), "rows": rejected_rows,
+            }
         request.session.modified = True
         messages.success(request, f"Imported {created_count} samples into dataset '{dataset.name}'.")
         for kind, values in new_anag.items():
             unique_values = sorted(set(values))
             if unique_values:
                 messages.info(request, f"New anagraphical values ({kind}): {', '.join(unique_values)}")
+        if rejected_rows:
+            messages.warning(
+                request,
+                f"{len(rejected_rows)} row(s) were not imported: at least one Pb ratio was present but "
+                "not all 5 could be completed. Download the raw data for those rows from this page.",
+            )
         return redirect("dataset-detail", pk=pk)
 
     return render(request, "datasets/preview_import.html", {
         "dataset": dataset, "preview": preview, "field_definitions": services.FIELD_DEFINITIONS,
     })
+
+
+@login_required
+def download_rejected_rows(request, pk):
+    """
+    Raw data (as read from the uploaded file, before any mapping) for the
+    rows the last import discarded because their Pb ratios couldn't be
+    completed to all 5 -- so the owner can fix and re-upload them.
+    """
+    dataset = get_object_or_404(Dataset, pk=pk)
+    if dataset.owner_id != request.user.id and not request.user.is_admin_role:
+        raise PermissionDenied("Only the owner can download this dataset's rejected rows.")
+
+    data = request.session.pop(_rejected_rows_session_key(pk), None)
+    request.session.modified = True
+    if not data:
+        messages.error(request, "No rejected-rows file available (maybe already downloaded, or no rows were rejected).")
+        return redirect("dataset-detail", pk=pk)
+
+    response = HttpResponse(content_type="text/csv")
+    response["Content-Disposition"] = f'attachment; filename="dataset_{pk}_righe_scartate.csv"'
+    writer = csv.DictWriter(response, fieldnames=data["columns"])
+    writer.writeheader()
+    writer.writerows(data["rows"])
+    return response

@@ -21,6 +21,16 @@
     </div>
 </div>
 
+{% if is_owner and rejected_rows_count %}
+<div class="alert alert-warning d-flex justify-content-between align-items-center">
+    <span>
+        {{ rejected_rows_count }} riga/e dell'ultimo caricamento non sono state importate: non è stato
+        possibile calcolare tutti e 5 i rapporti isotopici del Pb a partire da quelli forniti.
+    </span>
+    <a href="{% url 'dataset-rejected-rows' dataset.pk %}" class="btn btn-sm btn-warning text-nowrap ms-3">Scarica righe scartate (CSV)</a>
+</div>
+{% endif %}
+
 <div class="row mb-4">
     <div class="col-md-8">
         <div class="card">

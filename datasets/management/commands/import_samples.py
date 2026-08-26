@@ -3,6 +3,9 @@ Command-line import, for bulk/batch loading (e.g. the initial import of
 the historical archive) without going through the web wizard.
 Uses the same logic as datasets.services, shared with the web pages.
 """
+import csv
+import os
+
 from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 
@@ -48,7 +51,9 @@ class Command(BaseCommand):
                 status=DatasetStatus.DRAFT,
                 source_file_name=options["file_path"],
             )
-            created_count, new_anag = services.import_rows(df, dataset, owner, column_mapping, element_columns)
+            created_count, new_anag, rejected_rows = services.import_rows(
+                df, dataset, owner, column_mapping, element_columns
+            )
 
             merge_request = None
             if options["submit_for_review"]:
@@ -66,3 +71,14 @@ class Command(BaseCommand):
         for kind, values in new_anag.items():
             if values:
                 self.stdout.write(f"  New anagraphical values ({kind}): {sorted(set(values))}")
+
+        if rejected_rows:
+            rejected_path = f"{options['file_path']}.righe_scartate.csv"
+            with open(rejected_path, "w", newline="", encoding="utf-8") as fh:
+                writer = csv.DictWriter(fh, fieldnames=list(df.columns))
+                writer.writeheader()
+                writer.writerows(rejected_rows)
+            self.stdout.write(self.style.WARNING(
+                f"{len(rejected_rows)} row(s) not imported (incomplete Pb ratios): "
+                f"raw data saved to {os.path.abspath(rejected_path)}"
+            ))
