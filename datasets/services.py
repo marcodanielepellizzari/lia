@@ -181,26 +181,46 @@ def preview_rows(df, column_mapping, element_columns, max_rows=10):
     Pb ratio fields are parsed and completed with compute_missing_pb_ratios()
     so the preview already shows what will actually be imported; "vals"
     holds the display strings, "computed" flags which of those were derived
-    rather than read from the file, for the template to highlight.
+    rather than read from the file, and "rejected" flags a row that (like in
+    import_rows) supplies some Pb data but can't be completed to all 5 and
+    so won't be imported at all. rows_rejected_incomplete_pb is the same
+    count over the whole file, not just the displayed sample.
     """
     label_col = column_mapping.get("label")
     total = len(df)
     valid_labels = df[label_col].apply(clean_text).ne("") if label_col else pd.Series([False] * total)
+
     sample_rows = []
-    for _, row in df.head(max_rows).iterrows():
-        vals = {
-            key: clean_text(row.get(column_mapping.get(key), ""))
-            for key, _, _ in FIELD_DEFINITIONS if key not in PB_RATIO_KEYS
-        }
+    rows_rejected_incomplete_pb = 0
+    for _, row in df.iterrows():
+        label = clean_text(row.get(label_col, "")) if label_col else ""
         raw_pb = {key: clean_decimal(row.get(column_mapping.get(key)))[0] for key in PB_RATIO_KEYS}
+        attempted = any(v is not None for v in raw_pb.values())
         resolved_pb, computed_keys = compute_missing_pb_ratios(raw_pb)
-        for key in PB_RATIO_KEYS:
-            vals[key] = "" if resolved_pb[key] is None else str(resolved_pb[key])
-        sample_rows.append({"vals": vals, "computed": {key: key in computed_keys for key in PB_RATIO_KEYS}})
+        rejected = bool(label) and attempted and not all(v is not None for v in resolved_pb.values())
+        if rejected:
+            rows_rejected_incomplete_pb += 1
+
+        if len(sample_rows) < max_rows:
+            vals = {
+                key: clean_text(row.get(column_mapping.get(key), ""))
+                for key, _, _ in FIELD_DEFINITIONS if key not in PB_RATIO_KEYS
+            }
+            for key in PB_RATIO_KEYS:
+                vals[key] = "" if resolved_pb[key] is None else str(resolved_pb[key])
+            sample_rows.append({
+                "vals": vals,
+                "computed": {key: key in computed_keys for key in PB_RATIO_KEYS},
+                "rejected": rejected,
+            })
+
+    rows_with_label = int(valid_labels.sum())
     return {
         "total_rows": total,
-        "rows_with_label": int(valid_labels.sum()),
+        "rows_with_label": rows_with_label,
         "rows_skipped": int(total - valid_labels.sum()),
+        "rows_rejected_incomplete_pb": rows_rejected_incomplete_pb,
+        "rows_to_import": rows_with_label - rows_rejected_incomplete_pb,
         "element_columns_detected": len(element_columns),
         "sample_rows": sample_rows,
     }
@@ -209,13 +229,20 @@ def preview_rows(df, column_mapping, element_columns, max_rows=10):
 def import_rows(df, dataset, owner, column_mapping, element_columns):
     """
     Performs the actual import (step 5 of the loading-data slide). Returns
-    (samples_created_count, new_anagraphical_values_dict).
+    (samples_created_count, new_anagraphical_values_dict, rejected_rows).
+
+    A row that supplies at least one Pb ratio but can't be completed to all
+    5 (see compute_missing_pb_ratios) is not imported at all: it's collected
+    in rejected_rows (as the row's raw, unmapped values) instead, for the
+    caller to offer back to the user. Rows with no Pb data at all are
+    unaffected -- not every sample is expected to carry Pb measurements.
     """
     from catalog.models import Country, GeologicUnit, DepositType, Locality, AnalyticalMethod, Reference
     from .models import Sample, LeadIsotopeMeasurement
 
     new_anag = {"localities": [], "geologic_units": [], "deposit_types": []}
     created_count = 0
+    rejected_rows = []
 
     def get(row, key):
         col = column_mapping.get(key)
@@ -226,6 +253,16 @@ def import_rows(df, dataset, owner, column_mapping, element_columns):
     for _, row in df.iterrows():
         label = clean_text(get(row, "label"))
         if not label:
+            continue
+
+        pb_values = {}
+        for key in PB_RATIO_KEYS:
+            value, _ = clean_decimal(get(row, key))
+            pb_values[key] = value
+        attempted = any(v is not None for v in pb_values.values())
+        pb_values, _ = compute_missing_pb_ratios(pb_values)
+        if attempted and not all(v is not None for v in pb_values.values()):
+            rejected_rows.append({col: clean_text(value) for col, value in row.items()})
             continue
 
         country_name = clean_text(get(row, "country")) or "Unknown"
@@ -272,12 +309,7 @@ def import_rows(df, dataset, owner, column_mapping, element_columns):
             created_by=owner,
         )
 
-        pb_values = {}
-        for key in PB_RATIO_KEYS:
-            value, _ = clean_decimal(get(row, key))
-            pb_values[key] = value
-        pb_values, _ = compute_missing_pb_ratios(pb_values)
-        if any(v is not None for v in pb_values.values()):
+        if attempted:
             instrument = None
             instr_name = clean_text(get(row, "pb_instrument"))
             if instr_name:
@@ -308,4 +340,4 @@ def import_rows(df, dataset, owner, column_mapping, element_columns):
 
         created_count += 1
 
-    return created_count, new_anag
+    return created_count, new_anag, rejected_rows

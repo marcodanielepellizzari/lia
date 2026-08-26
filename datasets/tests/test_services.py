@@ -13,9 +13,13 @@ legacy .xls needs the `xlrd` package, which was missing from requirements.txt
 import decimal
 import os
 
-from django.test import SimpleTestCase
+import pandas as pd
+from django.contrib.auth import get_user_model
+from django.test import SimpleTestCase, TestCase
 
 from datasets import services
+from datasets.models import Sample
+from workflow.models import Dataset, DatasetStatus, DatasetVisibility
 
 FIXTURES_DIR = os.path.join(os.path.dirname(__file__), "fixtures")
 
@@ -143,3 +147,54 @@ class PreviewRowsHighlightsComputedPbRatiosTests(SimpleTestCase):
         self.assertFalse(first_row["computed"]["pb206_204"])
         self.assertNotEqual(first_row["vals"]["pb207_204"], "")
         self.assertNotEqual(first_row["vals"]["pb208_204"], "")
+
+
+class ImportRowsRejectsIncompletePbRatiosTests(TestCase):
+    """
+    import_rows() must not import a row that supplies some Pb data but
+    can't be completed to all 5 ratios -- it should be excluded entirely
+    (no Sample, no new anagraphical side-effects) and returned as raw data
+    in rejected_rows, while a row with a resolvable triple still imports
+    normally with all 5 ratios filled in.
+    """
+
+    def setUp(self):
+        self.user = get_user_model().objects.create_user(username="importer", password="pw12345")
+        self.dataset = Dataset.objects.create(
+            name="rejection test", owner=self.user,
+            visibility=DatasetVisibility.PRIVATE, status=DatasetStatus.DRAFT,
+        )
+        self.column_mapping = {
+            "label": "label_col", "country": "country_col",
+            "pb208_206": "pb208_206_col", "pb207_206": "pb207_206_col",
+            "pb206_204": "pb206_204_col", "pb207_204": "pb207_204_col", "pb208_204": "pb208_204_col",
+        }
+
+    def test_resolvable_row_imports_complete_incomplete_row_is_rejected(self):
+        df = pd.DataFrame({
+            "label_col": ["A1", "A2"],
+            "country_col": ["Italy", "Italy"],
+            # A1: 3 known (206/204, 207/206, 208/206) -> fully resolvable.
+            # A2: only 2 known (206/204, 208/206) -> not enough, rejected.
+            "pb208_206_col": ["2.08", "2.08"],
+            "pb207_206_col": ["0.84", None],
+            "pb206_204_col": ["18.77", "18.77"],
+            "pb207_204_col": [None, None],
+            "pb208_204_col": [None, None],
+        })
+
+        created_count, new_anag, rejected_rows = services.import_rows(
+            df, self.dataset, self.user, self.column_mapping, element_columns={}
+        )
+
+        self.assertEqual(created_count, 1)
+        self.assertEqual(Sample.objects.filter(dataset=self.dataset).count(), 1)
+        sample = Sample.objects.get(dataset=self.dataset, label="A1")
+        lead = sample.lead_isotopes
+        self.assertIsNotNone(lead.pb207_204)
+        self.assertIsNotNone(lead.pb208_204)
+
+        self.assertEqual(len(rejected_rows), 1)
+        self.assertEqual(rejected_rows[0]["label_col"], "A2")
+        self.assertEqual(rejected_rows[0]["pb208_206_col"], "2.08")
+        self.assertFalse(Sample.objects.filter(dataset=self.dataset, label="A2").exists())
