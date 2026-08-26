@@ -13,6 +13,12 @@
 </div>
 
 <h2 class="h6">Prime righe mappate</h2>
+<p class="small text-muted">
+    <span class="badge bg-warning text-dark">valore evidenziato</span> = rapporto isotopico del Pb
+    calcolato automaticamente, non presente nel file originale: quando una riga fornisce almeno 3
+    dei 5 rapporti (208Pb/206Pb, 207Pb/206Pb, 206Pb/204Pb, 207Pb/204Pb, 208Pb/204Pb), i rimanenti
+    vengono derivati dalle relazioni tra i rapporti (es. 207Pb/206Pb = 207Pb/204Pb ÷ 206Pb/204Pb).
+</p>
 <div class="table-responsive mb-4">
 <table class="table table-sm table-bordered">
     <thead>
@@ -23,7 +29,9 @@
     <tbody>
         {% for row in preview.sample_rows %}
         <tr>
-            {% for key, label, required in field_definitions %}<td>{{ row|get_item:key|default:"" }}</td>{% endfor %}
+            {% for key, label, required in field_definitions %}
+                <td{% if row.computed|get_item:key %} class="table-warning" title="Calcolato automaticamente dagli altri rapporti isotopici del Pb"{% endif %}>{{ row.vals|get_item:key|default:"" }}</td>
+            {% endfor %}
         </tr>
         {% endfor %}
     </tbody>

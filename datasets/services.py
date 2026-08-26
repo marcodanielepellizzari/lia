@@ -119,15 +119,84 @@ def clean_decimal(value):
         return None, False
 
 
+# Only 3 of the 5 Pb isotope ratios are independent (see analysis/page_views.py's
+# choice of 206/204, 207/204, 208/204 as the 3D axes): 207Pb/206Pb = 207Pb/204Pb
+# / 206Pb/204Pb, and 208Pb/206Pb = 208Pb/204Pb / 206Pb/204Pb. So whenever a row
+# provides at least 3 of the 5 ratios, the remaining ones can often be derived
+# from these two relations instead of being left blank.
+PB_RATIO_KEYS = ["pb208_206", "pb207_206", "pb206_204", "pb207_204", "pb208_204"]
+
+_PB_RATIO_RELATIONS = [
+    # (numerator_key, ratio_key, denominator_key)  ->  numerator = ratio * denominator
+    ("pb207_204", "pb207_206", "pb206_204"),
+    ("pb208_204", "pb208_206", "pb206_204"),
+]
+
+_PB_RATIO_QUANTUM = decimal.Decimal("0.000001")
+
+
+def compute_missing_pb_ratios(values):
+    """
+    Given {pb_ratio_key: Decimal_or_None}, fills in as many missing ratios as
+    possible from the ones present, iterating the two relations above until
+    nothing new can be derived. Only attempts this when at least 3 of the 5
+    are already known -- with fewer, there isn't enough information to derive
+    anything and we'd rather leave gaps than invent numbers.
+
+    Returns (values_with_gaps_filled, {keys_that_were_computed}).
+    """
+    known_count = sum(1 for v in values.values() if v is not None)
+    if known_count < 3:
+        return dict(values), set()
+
+    resolved = dict(values)
+    computed = set()
+    changed = True
+    while changed:
+        changed = False
+        for num_key, ratio_key, denom_key in _PB_RATIO_RELATIONS:
+            num, ratio, denom = resolved[num_key], resolved[ratio_key], resolved[denom_key]
+            try:
+                if num is None and ratio is not None and denom is not None:
+                    resolved[num_key] = (ratio * denom).quantize(_PB_RATIO_QUANTUM)
+                    computed.add(num_key)
+                    changed = True
+                elif ratio is None and num is not None and denom is not None:
+                    resolved[ratio_key] = (num / denom).quantize(_PB_RATIO_QUANTUM)
+                    computed.add(ratio_key)
+                    changed = True
+                elif denom is None and num is not None and ratio is not None:
+                    resolved[denom_key] = (num / ratio).quantize(_PB_RATIO_QUANTUM)
+                    computed.add(denom_key)
+                    changed = True
+            except (decimal.InvalidOperation, decimal.DivisionByZero, ZeroDivisionError):
+                continue
+    return resolved, computed
+
+
 def preview_rows(df, column_mapping, element_columns, max_rows=10):
     """Preview for wizard step 3: total rows, rows without a label
-    (discarded), detected element columns, first N mapped rows."""
+    (discarded), detected element columns, first N mapped rows.
+
+    Pb ratio fields are parsed and completed with compute_missing_pb_ratios()
+    so the preview already shows what will actually be imported; "vals"
+    holds the display strings, "computed" flags which of those were derived
+    rather than read from the file, for the template to highlight.
+    """
     label_col = column_mapping.get("label")
     total = len(df)
     valid_labels = df[label_col].apply(clean_text).ne("") if label_col else pd.Series([False] * total)
     sample_rows = []
     for _, row in df.head(max_rows).iterrows():
-        sample_rows.append({key: clean_text(row.get(column_mapping.get(key), "")) for key, _, _ in FIELD_DEFINITIONS})
+        vals = {
+            key: clean_text(row.get(column_mapping.get(key), ""))
+            for key, _, _ in FIELD_DEFINITIONS if key not in PB_RATIO_KEYS
+        }
+        raw_pb = {key: clean_decimal(row.get(column_mapping.get(key)))[0] for key in PB_RATIO_KEYS}
+        resolved_pb, computed_keys = compute_missing_pb_ratios(raw_pb)
+        for key in PB_RATIO_KEYS:
+            vals[key] = "" if resolved_pb[key] is None else str(resolved_pb[key])
+        sample_rows.append({"vals": vals, "computed": {key: key in computed_keys for key in PB_RATIO_KEYS}})
     return {
         "total_rows": total,
         "rows_with_label": int(valid_labels.sum()),
@@ -204,9 +273,10 @@ def import_rows(df, dataset, owner, column_mapping, element_columns):
         )
 
         pb_values = {}
-        for key in ["pb208_206", "pb207_206", "pb206_204", "pb207_204", "pb208_204"]:
+        for key in PB_RATIO_KEYS:
             value, _ = clean_decimal(get(row, key))
             pb_values[key] = value
+        pb_values, _ = compute_missing_pb_ratios(pb_values)
         if any(v is not None for v in pb_values.values()):
             instrument = None
             instr_name = clean_text(get(row, "pb_instrument"))
